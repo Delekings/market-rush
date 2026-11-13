@@ -1,0 +1,21 @@
+# Render Blueprint for Market Rush Live (New > Blueprint, pick this repo)
+services:
+  - type: web
+    name: market-rush-live
+    runtime: docker
+    dockerfilePath: ./live/Dockerfile
+    dockerContext: .
+    plan: pro   # 2 CPUs: needed to run the game and encode video smoothly
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: CONTROL_PASSCODE
+        sync: false
+      - key: YT_STREAM_KEY
+        sync: false
+      - key: YT_API_KEY
+        sync: false
+      - key: CHAT_POLL_MS
+        value: "5000"
+      - key: X264_PRESET
+        value: superfast

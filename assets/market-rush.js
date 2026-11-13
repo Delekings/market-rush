@@ -423,14 +423,31 @@
     this.busy = true;
     this.sel = null;
     this.grid = null;
+    this.mult = 1;
     this.build();
     this.layout();
-    this.showMenu();
+    if (root.getAttribute('data-menu') === 'off') {
+      this.cfg = levelConfig(1); this.grid = createBoard(this.cfg); this.buildCells(); this.render(true);
+      this.movesLeft = this.cfg.moves; this.score = 0; this.collected = 0; this.broken = 0; this.swept = 0; this.updateHud();
+    } else this.showMenu();
     var self = this;
     window.addEventListener('resize', function () { self.layout(); self.render(true); });
   }
 
   Game.prototype.q = function (s) { return this.root.querySelector(s); };
+
+  // Events for embedders (e.g. the live-stream studio): mr:level, mr:move, mr:clear, mr:win, mr:lose
+  Game.prototype.emit = function (name, detail) {
+    try { this.root.dispatchEvent(new CustomEvent('mr:' + name, { detail: detail || {} })); } catch (e) { /* ignore */ }
+  };
+
+  // Programmatic move. Resolves true if the swap made a match.
+  Game.prototype.playMove = function (r1, c1, r2, c2) {
+    var self = this;
+    if (this.busy) return Promise.resolve(false);
+    var before = this.movesLeft;
+    return this.trySwap(r1, c1, r2, c2).then(function () { return self.movesLeft < before; });
+  };
 
   Game.prototype.build = function () {
     this.root.innerHTML =
@@ -673,6 +690,7 @@
     this.render();
     await wait(190);
     if (!this.engineHasMatch()) {
+      this.emit('move', { valid: false, from: [r1, c1], to: [r2, c2] });
       this.sound.bad();
       swapCells(this.grid, r1, c1, r2, c2);
       this.render();
@@ -683,6 +701,7 @@
     }
     this.movesLeft--;
     this.movesUsed++;
+    this.emit('move', { valid: true, from: [r1, c1], to: [r2, c2] });
     this.updateHud();
     await this.cascade([[r2, c2], [r1, c1]]);
     this.endCheck();
@@ -722,7 +741,9 @@
       });
       info.blasts.forEach(function (b) { self.flash(b); });
       if (info.blasts.length) this.sound.boom(); else if (info.created.length) this.sound.special(); else this.sound.pop(combo);
+      info.gained *= this.mult || 1;
       this.score += info.gained;
+      this.emit('clear', { combo: combo, gained: info.gained, cleared: info.cleared.length, specials: info.created.length, blasts: info.blasts.length });
       var n = info.cleared.length || 1;
       this.floatText('+' + info.gained, (sx / n + 0.5) * this.ts, (sy / n + 0.5) * this.ts);
       if (combo >= 3 || info.cleared.length >= 8) this.cheer(CHEERS[rand(CHEERS.length)]);
@@ -843,6 +864,7 @@
       sand: 'Match on the sand to sweep it'
     }[this.cfg.type];
     this.cheer('Level ' + n);
+    this.emit('level', { n: n, type: this.cfg.type, target: this.cfg.target, moves: this.cfg.moves });
     this.floatText(goal, (COLS * this.ts) / 2, (ROWS * this.ts) * 0.62);
     await wait(500);
     this.busy = false;
@@ -857,6 +879,7 @@
     this.save.unlocked = Math.max(this.save.unlocked, Math.min(cfg.n + 1, MAX_LEVEL));
     writeSave(this.save);
     this.sound.win();
+    this.emit('win', { n: cfg.n, stars: stars, score: this.score, movesLeft: this.movesLeft });
     var last = cfg.n >= MAX_LEVEL;
     this.showOverlay(
       '<div class="mr-title">' + (last ? 'Market cleared!' : 'Level ' + cfg.n + ' done!') + '</div>' +
@@ -872,6 +895,7 @@
   Game.prototype.lose = function () {
     var cfg = this.cfg, pct = Math.round(clamp(this.goalValue() / cfg.target, 0, 1) * 100);
     this.sound.lose();
+    this.emit('lose', { n: cfg.n, pct: pct, score: this.score });
     this.showOverlay(
       '<div class="mr-title">Out of moves</div>' +
       '<div class="mr-sub">You got ' + pct + '% of the way. Give am another go!</div>' +
@@ -889,6 +913,6 @@
       if (!roots[i].__mr) roots[i].__mr = new Game(roots[i]);
     }
   }
-  window.MarketRush = { boot: boot, engine: Engine };
+  window.MarketRush = { boot: boot, engine: Engine, FRUITS: FRUITS, MAX_LEVEL: MAX_LEVEL };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();

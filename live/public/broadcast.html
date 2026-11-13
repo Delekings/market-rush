@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Market Rush Live</title>
+<link rel="stylesheet" href="/assets/market-rush.css">
+<link rel="stylesheet" href="/live/broadcast.css">
+</head>
+<body>
+<div id="stage">
+  <section id="left">
+    <div id="game-holder">
+      <div class="mr-root" id="game" data-assist="on" data-max-width="536" data-menu="off"></div>
+    </div>
+  </section>
+
+  <section id="right">
+    <header id="brand">
+      <div class="brand-title">MARKET RUSH <span class="live-dot">● LIVE</span></div>
+      <div id="mode-badge">CHAT PLAYS</div>
+    </header>
+
+    <div id="howto" class="panel">
+      <div class="howto-big">Type a move in chat: <b>C4 right</b></div>
+      <div class="howto-small">Letter = column, number = row, then up / down / left / right</div>
+    </div>
+
+    <div id="vote" class="panel">
+      <div class="panel-title"><span id="turn-label">Chat's move</span><span id="vote-timer">12</span></div>
+      <div id="vote-bar"><div id="vote-bar-fill"></div></div>
+      <ol id="vote-list"><li class="empty">No votes yet. Be the first!</li></ol>
+    </div>
+
+    <div id="row2">
+      <div id="chat" class="panel">
+        <div class="panel-title">Chat</div>
+        <ul id="chat-list"></ul>
+      </div>
+      <div id="side">
+        <div id="hype" class="panel">
+          <div class="panel-title">Hype <span id="hype-pct">0%</span></div>
+          <div id="hype-bar"><div id="hype-fill"></div></div>
+          <div id="hype-hint">Spam 🔥 to start a MARKET RUSH</div>
+        </div>
+        <div id="board-leaders" class="panel">
+          <div class="panel-title">Top helpers</div>
+          <ol id="leaders"><li class="empty">Win a vote to get on the board</li></ol>
+        </div>
+        <div id="versus" class="panel hidden">
+          <div class="panel-title">Versus</div>
+          <div id="versus-score">Chat 0 : 0 Host</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div id="poll" class="hidden">
+    <div class="poll-q" id="poll-q">Will we clear this level?</div>
+    <div class="poll-a">Type <b>YES</b> or <b>NO</b> <span id="poll-timer"></span></div>
+    <div class="poll-bars"><div id="poll-yes">YES 0</div><div id="poll-no">NO 0</div></div>
+  </div>
+
+  <div id="banner" class="hidden"></div>
+  <div id="announce" class="hidden"></div>
+  <div id="rush" class="hidden">MARKET RUSH! <small>double points</small></div>
+  <div id="confetti"></div>
+  <footer id="ticker"><span id="ticker-text"></span></footer>
+</div>
+
+<audio id="custom-music" loop preload="auto"></audio>
+<script src="/assets/market-rush.js"></script>
+<script src="/live/music.js"></script>
+<script src="/live/broadcast.js"></script>
+</body>
+</html>

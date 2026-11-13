@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#1b4332">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Market Rush Live Remote</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥭</text></svg>">
+<style>
+  :root { --bg: #0f2a1f; --card: #173b2c; --line: rgba(255,255,255,.1); --gold: #ffd166; --red: #e63946; --green: #52b788; --text: #f4f1ea; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: env(safe-area-inset-top) 0 calc(env(safe-area-inset-bottom) + 20px); }
+  header { position: sticky; top: 0; z-index: 5; background: rgba(15,42,31,.95); backdrop-filter: blur(6px); padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+  h1 { font-size: 18px; margin: 0; }
+  .pill { font-size: 13px; font-weight: 800; padding: 5px 10px; border-radius: 999px; background: #44574e; }
+  .pill.live { background: var(--red); animation: blink 1.6s infinite; }
+  @keyframes blink { 50% { opacity: .6; } }
+  main { padding: 12px; display: grid; gap: 12px; max-width: 560px; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--gold); margin: 0 0 10px; }
+  label { font-size: 13px; opacity: .8; display: block; margin: 8px 0 4px; }
+  input[type=text], input[type=password], select { width: 100%; font-size: 16px; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: #0d241a; color: var(--text); }
+  button { font: inherit; font-weight: 800; border: 0; border-radius: 12px; padding: 12px 14px; background: #2d6a4f; color: #fff; cursor: pointer; }
+  button:active { transform: scale(.98); }
+  button.big { width: 100%; font-size: 18px; padding: 16px; }
+  button.go { background: linear-gradient(180deg, #f77f00, #d1495b); }
+  button.end { background: #5c1a22; }
+  button.ghost { background: transparent; border: 1px solid var(--line); }
+  button.sel { background: var(--gold); color: #1b4332; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  .muted { font-size: 13px; opacity: .7; line-height: 1.4; }
+  .stat { display: flex; justify-content: space-between; font-size: 14px; padding: 4px 0; border-bottom: 1px dashed var(--line); }
+  .stat:last-child { border: 0; }
+  .ok { color: #b5e48c; } .bad { color: #ffb4a2; }
+  #board { display: grid; grid-template-columns: 18px repeat(8, 1fr); gap: 3px; user-select: none; touch-action: manipulation; }
+  #board .h { font-size: 11px; font-weight: 800; color: var(--gold); display: flex; align-items: center; justify-content: center; }
+  #board .c { aspect-ratio: 1; border-radius: 8px; background: rgba(0,0,0,.25); display: flex; align-items: center; justify-content: center; font-size: min(7vw, 32px); position: relative; }
+  #board .c.void { background: transparent; }
+  #board .c.sand { box-shadow: inset 0 0 0 3px #e9c46a; }
+  #board .c.sand2 { box-shadow: inset 0 0 0 3px #b9781f; }
+  #board .c.sp::after { content: "✦"; position: absolute; top: 0; right: 2px; font-size: 11px; color: #fff; }
+  #board .c.selc { outline: 3px solid var(--gold); outline-offset: -1px; transform: scale(1.06); }
+  #boardinfo { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 8px; font-weight: 700; }
+  #turnline { font-size: 13px; margin-top: 8px; text-align: center; opacity: .85; }
+  #toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 20px); transform: translateX(-50%); background: #fffaf0; color: #1b4332; font-weight: 800; padding: 10px 16px; border-radius: 12px; z-index: 9; display: none; max-width: 90vw; text-align: center; }
+  #toast.err { background: #ffb4a2; }
+  #login { max-width: 420px; margin: 18vh auto 0; padding: 20px; }
+  .hidden { display: none !important; }
+  input[type=range] { width: 100%; }
+  .votes { font-size: 13px; margin-top: 6px; opacity: .85; }
+</style>
+</head>
+<body>
+
+<div id="login" class="hidden">
+  <div class="card">
+    <h2>Market Rush Live</h2>
+    <label for="pass">Studio passcode</label>
+    <input id="pass" type="password" autocomplete="current-password">
+    <div style="height:12px"></div>
+    <button class="big go" id="login-btn">Open remote</button>
+    <p class="muted">This is the passcode you set as CONTROL_PASSCODE on your server.</p>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <header><h1>🥭 Market Rush Live</h1><span id="live-pill" class="pill">OFFLINE</span></header>
+  <main>
+    <section class="card">
+      <h2>Go live</h2>
+      <div id="key-row">
+        <label for="key">YouTube stream key</label>
+        <input id="key" type="password" placeholder="From YouTube app or Studio: Go live > Stream" autocomplete="off">
+      </div>
+      <div style="height:10px"></div>
+      <button class="big go" id="live-btn">Go live</button>
+      <div style="height:10px"></div>
+      <div class="stat"><span>Game scene</span><span id="st-scene">…</span></div>
+      <div class="stat"><span>Stream</span><span id="st-enc">Not streaming</span></div>
+      <div class="stat"><span>Live for</span><span id="st-time">–</span></div>
+    </section>
+
+    <section class="card">
+      <h2>Live chat</h2>
+      <label for="video">Your live video link</label>
+      <input id="video" type="text" placeholder="youtube.com/live/… or youtu.be/…" autocomplete="off">
+      <div style="height:10px"></div>
+      <div class="row"><button id="chat-btn">Connect chat</button><button class="ghost" id="chat-off">Stop</button></div>
+      <div style="height:8px"></div>
+      <div class="stat"><span>Chat</span><span id="st-chat">Off</span></div>
+      <div class="stat"><span>API quota used today</span><span id="st-units">0 / 10,000</span></div>
+    </section>
+
+    <section class="card">
+      <h2>Who plays</h2>
+      <div class="row" id="modes">
+        <button data-mode="chat">Chat plays</button><button data-mode="host">I play</button><button data-mode="versus">Versus</button>
+      </div>
+      <label for="vote-ms">Vote time: <b id="vote-ms-val">12</b>s</label>
+      <input id="vote-ms" type="range" min="5" max="30" step="1" value="12">
+    </section>
+
+    <section class="card">
+      <h2>Board</h2>
+      <div id="boardinfo"><span id="b-level">Level –</span><span id="b-goal">–</span><span id="b-moves">– moves</span></div>
+      <div id="board"></div>
+      <div id="turnline">Tap a fruit, then tap its neighbour to swap</div>
+      <div class="votes" id="b-votes"></div>
+      <div style="height:10px"></div>
+      <div class="row">
+        <button class="ghost" id="retry-btn">Retry</button>
+        <button class="ghost" id="next-btn">Next level</button>
+        <select id="level-pick" aria-label="Jump to level"></select>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Crowd</h2>
+      <label for="ann">Announcement on screen</label>
+      <div class="row"><input id="ann" type="text" maxlength="90" placeholder="Shout out to everyone from Lagos!"><button id="ann-btn" style="flex:0 0 auto">Show</button></div>
+      <div style="height:10px"></div>
+      <div class="row"><button id="hype-btn">+25% hype</button><button id="rush-btn" class="go">Start Market Rush</button></div>
+      <div style="height:10px"></div>
+      <button class="ghost big" id="reset-btn" style="font-size:14px;padding:10px">Reset helpers board</button>
+    </section>
+
+    <section class="card">
+      <h2>Music</h2>
+      <div class="row"><button id="m-groove">Afro groove</button><button id="m-off" class="ghost">Music off</button></div>
+      <label for="m-vol">Volume</label>
+      <input id="m-vol" type="range" min="0" max="100" value="55">
+      <label for="m-file">Or play your own track (loops)</label>
+      <input id="m-file" type="file" accept="audio/*">
+      <p class="muted">Only use music you own or have a licence for. YouTube can mute or block streams with copyrighted songs. The Afro groove is original and safe to use.</p>
+    </section>
+
+    <section class="card">
+      <h2>Test without YouTube</h2>
+      <div class="row"><input id="t-name" type="text" value="Tester" style="flex:0 0 34%"><input id="t-msg" type="text" placeholder="C4 right, YES, 🔥🔥"></div>
+      <div style="height:8px"></div>
+      <button id="t-send" class="ghost big" style="font-size:14px;padding:10px">Send as chat</button>
+      <div style="height:10px"></div>
+      <button id="restart-btn" class="ghost big" style="font-size:14px;padding:10px">Restart game scene</button>
+    </section>
+  </main>
+</div>
+<div id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var COLS = 'ABCDEFGH';
+  var ws = null, status = {}, state = null, sel = null, pass = '';
+  try { pass = localStorage.getItem('mrl.pass') || ''; } catch (e) {}
+
+  function toast(t, err) { var el = $('toast'); el.textContent = t; el.className = err ? 'err' : ''; el.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(function () { el.style.display = 'none'; }, 3200); }
+  function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); else toast('Not connected to the server', true); }
+  function cmd(o) { o.type = 'cmd'; send(o); }
+
+  function connect() {
+    var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(proto + '//' + location.host + '/ws?role=control&pass=' + encodeURIComponent(pass));
+    ws.onopen = function () { $('login').classList.add('hidden'); $('app').classList.remove('hidden'); try { localStorage.setItem('mrl.pass', pass); } catch (e) {} };
+    ws.onmessage = function (ev) {
+      var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (m.type === 'status') { status = m; renderStatus(); }
+      else if (m.type === 'state') { state = m; renderState(); }
+      else if (m.type === 'toast') toast(m.text, m.level === 'error');
+    };
+    ws.onclose = function (ev) {
+      if (ev.code === 4003) { try { localStorage.removeItem('mrl.pass'); } catch (e) {} showLogin(pass ? 'Wrong passcode' : ''); return; }
+      setTimeout(connect, 2000);
+    };
+  }
+  function showLogin(msg) { $('app').classList.add('hidden'); $('login').classList.remove('hidden'); if (msg) toast(msg, true); }
+
+  function fmt(ms) { var s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); s = s % 60; return (h ? h + ':' : '') + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0'); }
+
+  function renderStatus() {
+    var live = status.live;
+    $('live-pill').textContent = live ? '● LIVE' : 'OFFLINE';
+    $('live-pill').className = 'pill' + (live ? ' live' : '');
+    $('live-btn').textContent = live ? 'End stream' : 'Go live';
+    $('live-btn').className = 'big ' + (live ? 'end' : 'go');
+    $('key').placeholder = status.streamKeySet ? 'Saved on server ✓ (type to replace)' : 'From YouTube app or Studio: Go live > Stream';
+    $('st-scene').innerHTML = status.sceneReady ? '<span class="ok">Running</span>' : '<span class="bad">' + (status.sceneError || 'Starting…') + '</span>';
+    var e = status.encoder;
+    $('st-enc').innerHTML = !live ? 'Not streaming' : !e ? 'Starting…' :
+      e.state === 'streaming' ? '<span class="ok">Sending ' + e.kbps + ' kbps · ' + e.fps + ' fps</span>' :
+      '<span class="bad">' + (e.state === 'reconnecting' ? 'Reconnecting… ' : 'Connecting… ') + (e.lastError || '') + '</span>';
+    var c = status.chat || {};
+    $('st-chat').innerHTML = !c.enabled ? '<span class="bad">Needs YT_API_KEY on server</span>' :
+      c.state === 'connected' ? '<span class="ok">Connected · ' + c.messages + ' msgs</span>' :
+      c.state === 'connecting' ? 'Connecting…' : (c.error ? '<span class="bad">' + c.error + '</span>' : 'Off');
+    $('st-units').textContent = (c.unitsToday || 0).toLocaleString() + ' / 10,000';
+  }
+  setInterval(function () { $('st-time').textContent = status.live && status.since ? fmt(Date.now() - status.since) : '–'; }, 1000);
+
+  function renderState() {
+    var s = state;
+    $('b-level').textContent = 'Level ' + s.level;
+    $('b-goal').textContent = s.goal;
+    $('b-moves').textContent = s.moves + ' moves';
+    document.querySelectorAll('#modes button').forEach(function (b) { b.classList.toggle('sel', b.dataset.mode === s.mode); });
+    $('turnline').textContent = s.turn === 'host' ? 'Your turn: tap a fruit, then its neighbour' : "Chat's turn (tap to force a move)";
+    $('b-votes').textContent = s.votes && s.votes.length ? 'Chat votes: ' + s.votes.map(function (v) { return v.label + ' (' + v.count + ')'; }).join(', ') : '';
+    $('vote-ms-val').textContent = Math.round(s.voteMs / 1000);
+    var html = '<div></div>';
+    for (var i = 0; i < 8; i++) html += '<div class="h">' + COLS[i] + '</div>';
+    for (var r = 0; r < 8; r++) {
+      html += '<div class="h">' + (r + 1) + '</div>';
+      for (var c = 0; c < 8; c++) {
+        var v = s.cells[r][c], cls = 'c', face = '';
+        if (v === '#') cls += ' void';
+        else if (v && v[0] === 'b') face = '🧺';
+        else if (v !== '') { face = s.fruits[parseInt(v, 10)]; if (v.length > 1) cls += ' sp'; }
+        var sd = s.sand && s.sand[r] ? s.sand[r][c] : 0;
+        if (sd === 1) cls += ' sand'; if (sd >= 2) cls += ' sand2';
+        if (sel && sel[0] === r && sel[1] === c) cls += ' selc';
+        html += '<div class="' + cls + '" data-r="' + r + '" data-c="' + c + '">' + face + '</div>';
+      }
+    }
+    $('board').innerHTML = html;
+    var lp = $('level-pick');
+    if (!lp.options.length) { lp.innerHTML = '<option value="">Level…</option>' + Array.from({ length: 30 }, function (_, i) { return '<option value="' + (i + 1) + '">Level ' + (i + 1) + '</option>'; }).join(''); }
+    var m = s.music || {};
+    $('m-groove').classList.toggle('sel', m.on && m.source !== 'custom');
+    $('m-off').classList.toggle('sel', !m.on);
+  }
+
+  $('board').addEventListener('click', function (e) {
+    var el = e.target.closest('.c');
+    if (!el || !state) return;
+    var r = +el.dataset.r, c = +el.dataset.c;
+    if (sel && Math.abs(sel[0] - r) + Math.abs(sel[1] - c) === 1) {
+      cmd({ cmd: 'move', from: sel, to: [r, c], force: state.turn !== 'host' });
+      sel = null;
+    } else sel = (sel && sel[0] === r && sel[1] === c) ? null : [r, c];
+    renderState();
+  });
+
+  $('login-btn').onclick = function () { pass = $('pass').value; connect(); };
+  $('pass').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('login-btn').click(); });
+  $('live-btn').onclick = function () {
+    if (status.live) { if (confirm('End the live stream?')) send({ type: 'endlive' }); return; }
+    var k = $('key').value.trim();
+    send({ type: 'golive', key: k || undefined });
+    $('key').value = '';
+  };
+  $('chat-btn').onclick = function () { send({ type: 'chat-connect', video: $('video').value }); try { localStorage.setItem('mrl.video', $('video').value); } catch (e) {} };
+  $('chat-off').onclick = function () { send({ type: 'chat-disconnect' }); };
+  document.querySelectorAll('#modes button').forEach(function (b) { b.onclick = function () { cmd({ cmd: 'mode', mode: b.dataset.mode }); }; });
+  $('vote-ms').oninput = function () { $('vote-ms-val').textContent = this.value; };
+  $('vote-ms').onchange = function () { cmd({ cmd: 'vote-window', ms: this.value * 1000 }); };
+  $('retry-btn').onclick = function () { if (state) cmd({ cmd: 'level', n: state.level }); };
+  $('next-btn').onclick = function () { if (state) cmd({ cmd: 'level', n: state.level >= 30 ? 1 : state.level + 1 }); };
+  $('level-pick').onchange = function () { if (this.value) cmd({ cmd: 'level', n: +this.value }); this.value = ''; };
+  $('ann-btn').onclick = function () { var t = $('ann').value.trim(); if (t) { cmd({ cmd: 'announce', text: t }); $('ann').value = ''; } };
+  $('hype-btn').onclick = function () { cmd({ cmd: 'hype' }); };
+  $('rush-btn').onclick = function () { cmd({ cmd: 'rush' }); };
+  $('reset-btn').onclick = function () { if (confirm('Clear the Top helpers board and versus score?')) cmd({ cmd: 'reset-board' }); };
+  $('m-groove').onclick = function () { cmd({ cmd: 'music', on: true, source: 'groove' }); };
+  $('m-off').onclick = function () { cmd({ cmd: 'music', on: false }); };
+  $('m-vol').onchange = function () { cmd({ cmd: 'music', vol: this.value / 100 }); };
+  $('m-file').onchange = function () {
+    var f = this.files[0]; if (!f) return;
+    toast('Uploading ' + f.name + '…');
+    fetch('/api/music', { method: 'POST', headers: { 'Content-Type': f.type || 'audio/mpeg', 'X-Passcode': pass }, body: f })
+      .then(function (r) { return r.ok ? toast('Now playing your track') : r.text().then(function (t) { toast(t, true); }); })
+      .catch(function () { toast('Upload failed', true); });
+    this.value = '';
+  };
+  $('t-send').onclick = function () { var t = $('t-msg').value.trim(); if (t) { send({ type: 'test-chat', author: $('t-name').value, text: t }); $('t-msg').value = ''; } };
+  $('t-msg').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('t-send').click(); });
+  $('restart-btn').onclick = function () { if (confirm('Restart the game scene? Viewers see a few seconds of blank screen.')) send({ type: 'restart-scene' }); };
+  try { $('video').value = localStorage.getItem('mrl.video') || ''; } catch (e) {}
+
+  // Try saved passcode (or none, if the server has no passcode).
+  connect();
+  setTimeout(function () { if ($('app').classList.contains('hidden')) showLogin(); }, 1500);
+})();
+</script>
+</body>
+</html>
