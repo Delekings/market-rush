@@ -2,3 +2,6 @@ node_modules
 live/node_modules
 .git
 wordpress-plugin
+bin
+live/.env
+*.command

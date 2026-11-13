@@ -51,7 +51,16 @@ Go live or end the stream, switch between *Chat plays*, *I play* and *Versus* (y
 play moves by tapping the board, jump levels, show announcements, boost hype, switch music or upload your own track,
 and send test chat messages to try everything before going live.
 
-### Setup (one time, about 20 minutes)
+### Run it on your Mac (free, no card)
+1. Install **Docker Desktop** (free for personal use) and open it once.
+2. Double-click **Start Market Rush Live.command** in this folder. If macOS blocks it, right-click it, choose **Open**, then **Open** again.
+3. The first time, a settings file opens: set `CONTROL_PASSCODE`, add your YouTube stream key and API key if you have them, save, and press Enter in the window.
+4. When it says **READY**, it shows a link (also copied to your clipboard). Open it on your phone, enter your passcode, and tap **Go live**.
+5. Keep the window open while you stream (your Mac stays awake). Close it to stop everything.
+
+The phone link is a free Cloudflare quick tunnel, so it changes each time you start. Your Mac needs a steady upload of about 5 Mbps; if yours is slower, set `VIDEO_KBPS=2500` in `live/.env`.
+
+### Cloud setup (one time, about 20 minutes)
 1. **YouTube:** make sure live streaming is enabled on your channel (YouTube can take up to 24 hours to switch it on
    the first time). In the YouTube app or YouTube Studio, go to *Go live > Stream* and copy your **stream key**.
 2. **YouTube API key (for chat):** in Google Cloud Console, create a project, enable **YouTube Data API v3**,

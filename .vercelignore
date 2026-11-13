@@ -1,3 +1,5 @@
 wordpress-plugin
 live
 render.yaml
+bin
+*.command
