@@ -6,6 +6,8 @@
 
 const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 const W = parseInt(process.env.WIDTH || '1280', 10);
 const H = parseInt(process.env.HEIGHT || '720', 10);
@@ -14,6 +16,9 @@ const VIDEO_KBPS = parseInt(process.env.VIDEO_KBPS || '3500', 10);
 const PRESET = process.env.X264_PRESET || 'veryfast';
 const DISPLAY = process.env.STUDIO_DISPLAY || ':99';
 const SINK = 'mr_sink';
+const MODE = process.env.STUDIO_MODE || 'linux';            // 'linux' (virtual screen) or 'local' (your own Chrome records itself)
+const FFMPEG = process.env.FFMPEG_BIN || 'ffmpeg';
+const LOCAL_PROFILE = path.join(os.tmpdir(), 'mr-studio-profile');
 
 function findChrome() {
   const list = [process.env.CHROME_BIN, '/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable'];
@@ -25,6 +30,31 @@ class Studio {
     this.port = opts.port; this.token = opts.token; this.onStatus = opts.onStatus || (() => {});
     this.procs = {}; this.live = false; this.since = null; this.encoder = null; this.sceneError = null;
     this.wantLive = null; this.stopping = false; this.restarts = 0;
+    this.mode = MODE; this.vcodec = process.env.FFMPEG_VCODEC || 'libx264';
+    this.onEncoderStart = opts.onEncoderStart || (() => {}); this.onEncoderStop = opts.onEncoderStop || (() => {});
+  }
+
+  /* ----- local mode: the scene runs in the user's own Chrome and sends its video here ----- */
+  startLocalScene() {
+    if (process.env.LOCAL_OPEN === 'off') return;
+    const url = 'http://127.0.0.1:' + this.port + '/broadcast?capture=1&token=' + this.token;
+    const flags = ['--app=' + url, '--user-data-dir=' + LOCAL_PROFILE, '--window-size=1280,800', '--window-position=60,60',
+      '--autoplay-policy=no-user-gesture-required', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
+      '--disable-background-timer-throttling', '--no-first-run', '--no-default-browser-check'];
+    let p;
+    if (process.platform === 'darwin') p = spawn('open', ['-na', 'Google Chrome', '--args'].concat(flags), { stdio: 'ignore' });
+    else { const c = findChrome(); if (!c) { this.sceneError = 'Chrome not found'; return this.onStatus(); } p = spawn(c, flags, { stdio: 'ignore', detached: true }); }
+    p.on('error', (e) => { this.sceneError = 'Could not open Chrome: ' + e.message; this.onStatus(); });
+    this.sceneError = null;
+  }
+
+  closeLocalScene() {
+    try { execFileSync('pkill', ['-f', LOCAL_PROFILE], { stdio: 'ignore' }); } catch (e) { /* not running */ }
+  }
+
+  feed(chunk) {
+    const p = this.procs.ffmpeg;
+    if (p && p.stdin && p.stdin.writable) p.stdin.write(chunk);
   }
 
   env() { return Object.assign({}, process.env, { DISPLAY, PULSE_SINK: SINK }); }
@@ -39,6 +69,7 @@ class Studio {
 
   startScene() {
     this.stopping = false;
+    if (this.mode === 'local') return this.startLocalScene();
     try {
       // 1. Virtual screen
       this.spawnLogged('xvfb', 'Xvfb', [DISPLAY, '-screen', '0', W + 'x' + H + 'x24', '-nolisten', 'tcp', '-ac']);
@@ -82,6 +113,7 @@ class Studio {
   }
 
   restartScene() {
+    if (this.mode === 'local') { this.closeLocalScene(); return setTimeout(() => this.startLocalScene(), 1500); }
     if (this.procs.chrome) { try { this.procs.chrome.kill('SIGKILL'); } catch (e) { /* ignore */ } }
   }
 
@@ -95,7 +127,18 @@ class Studio {
     const out = this.wantLive;
     if (!out) return;
     const isFile = !/^rtmps?:\/\//.test(out);
-    const args = [
+    const local = this.mode === 'local';
+    const venc = this.vcodec === 'h264_videotoolbox'
+      ? ['-c:v', 'h264_videotoolbox', '-realtime', '1', '-b:v', VIDEO_KBPS + 'k', '-maxrate', VIDEO_KBPS + 'k', '-bufsize', (VIDEO_KBPS * 2) + 'k']
+      : ['-c:v', 'libx264', '-preset', PRESET, '-tune', 'zerolatency', '-b:v', VIDEO_KBPS + 'k', '-maxrate', VIDEO_KBPS + 'k', '-bufsize', (VIDEO_KBPS * 2) + 'k', '-sc_threshold', '0'];
+    const localArgs = [
+      '-hide_banner', '-loglevel', 'error', '-stats', '-y', '-fflags', '+genpts', '-thread_queue_size', '1024', '-i', 'pipe:0',
+      // The tab may be taller than 16:9 and on a Retina screen: keep the top 16:9 area, then size to the output.
+      '-vf', 'crop=iw:min(ih\\,trunc(iw*9/32)*2):0:0,scale=' + W + ':' + H + ',fps=' + FPS,
+      ...venc, '-pix_fmt', 'yuv420p', '-g', String(FPS * 2), '-keyint_min', String(FPS * 2),
+      '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-ac', '2'
+    ];
+    const args = local ? localArgs : [
       '-hide_banner', '-loglevel', 'error', '-stats', '-y',
       '-thread_queue_size', '1024', '-f', 'x11grab', '-draw_mouse', '0', '-video_size', W + 'x' + H, '-framerate', String(FPS), '-i', DISPLAY + '.0+0,0',
       '-thread_queue_size', '1024', '-f', 'pulse', '-i', SINK + '.monitor',
@@ -107,7 +150,9 @@ class Studio {
     if (process.env.MAX_SECONDS) args.push('-t', process.env.MAX_SECONDS);
     args.push('-f', isFile && /\.mp4$/.test(out) ? 'mp4' : 'flv', out);
 
-    const p = this.spawnLogged('ffmpeg', 'ffmpeg', args);
+    const p = this.spawnLogged('ffmpeg', FFMPEG, args, local ? { stdio: ['pipe', 'ignore', 'pipe'] } : undefined);
+    if (p.stdin) p.stdin.on('error', () => { /* encoder closed */ });
+    if (local) setTimeout(() => this.onEncoderStart(), 300);
     this.live = true; this.since = this.since || Date.now(); this.encoder = { state: 'connecting' };
     let buf = '';
     p.stderr.on('data', (d) => {
@@ -121,6 +166,12 @@ class Studio {
     p.on('exit', (code) => {
       clearInterval(ticker);
       this.procs.ffmpeg = null;
+      if (local) this.onEncoderStop();
+      if (/Unknown encoder|videotoolbox|Error while opening encoder/i.test(buf) && this.vcodec !== 'libx264') this.vcodec = 'libx264';
+      // Some FFmpeg builds can't do encrypted RTMPS: fall back to YouTube's plain RTMP address.
+      if (/Protocol not found|rtmps/i.test(buf) && this.wantLive && /^rtmps:\/\/a\.rtmps\.youtube\.com(:443)?\//.test(this.wantLive)) {
+        this.wantLive = this.wantLive.replace(/^rtmps:\/\/a\.rtmps\.youtube\.com(:443)?\//, 'rtmp://a.rtmp.youtube.com/');
+      }
       if (this.wantLive && !this.stopping && !process.env.MAX_SECONDS) {
         // Dropped connection: retry automatically so the stream comes back by itself.
         this.encoder = Object.assign({}, this.encoder, { state: 'reconnecting' });
@@ -142,6 +193,7 @@ class Studio {
 
   shutdown() {
     this.stopping = true; this.wantLive = null;
+    if (this.mode === 'local') this.closeLocalScene();
     Object.values(this.procs).forEach((p) => { try { p && p.kill('SIGKILL'); } catch (e) { /* ignore */ } });
     try { execFileSync('pulseaudio', ['--kill'], { stdio: 'ignore' }); } catch (e) { /* ignore */ }
   }

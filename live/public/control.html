@@ -187,7 +187,8 @@
     $('live-btn').textContent = live ? 'End stream' : 'Go live';
     $('live-btn').className = 'big ' + (live ? 'end' : 'go');
     $('key').placeholder = status.streamKeySet ? 'Saved on server ✓ (type to replace)' : 'From YouTube app or Studio: Go live > Stream';
-    $('st-scene').innerHTML = status.sceneReady ? '<span class="ok">Running</span>' : '<span class="bad">' + (status.sceneError || 'Starting…') + '</span>';
+    $('st-scene').innerHTML = !status.sceneReady ? '<span class="bad">' + (status.sceneError || 'Starting…') + '</span>' :
+      (status.localMode && !status.captureReady) ? '<span class="bad">Click “Start studio” in the window on your Mac</span>' : '<span class="ok">Running</span>';
     var e = status.encoder;
     $('st-enc').innerHTML = !live ? 'Not streaming' : !e ? 'Starting…' :
       e.state === 'streaming' ? '<span class="ok">Sending ' + e.kbps + ' kbps · ' + e.fps + ' fps</span>' :

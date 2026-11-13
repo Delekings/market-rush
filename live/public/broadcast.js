@@ -329,6 +329,69 @@
     } else { custom.pause(); groove.start(); }
   }
 
+  /* ---------------- capture mode (Mac: Chrome records its own tab) ---------------- */
+  var CAPTURE = new URLSearchParams(location.search).get('capture') === '1';
+  var cap = { stream: null, rec: null, ingest: null };
+  function fitStage() {
+    var s = window.innerWidth / 1280;
+    $('stage').style.transformOrigin = '0 0';
+    $('stage').style.transform = 'scale(' + s + ')';
+  }
+  function captureGate(show, msg) {
+    var g = $('capture-gate');
+    if (!g) {
+      g = document.createElement('div'); g.id = 'capture-gate';
+      g.innerHTML = '<div class="cg-card"><div class="cg-title">Market Rush Studio</div><div class="cg-msg"></div>' +
+        '<button type="button" id="cg-btn">Start studio</button><div class="cg-small">Chrome will ask to share this tab. Choose <b>Allow</b> / <b>Share</b>.<br>Keep this window open. It can sit behind other windows, but don\'t minimise it.</div></div>';
+      document.body.appendChild(g);
+      $('cg-btn').onclick = startCapture;
+    }
+    g.querySelector('.cg-msg').textContent = msg || 'Click Start studio so this window can be sent to YouTube.';
+    g.style.display = show ? 'flex' : 'none';
+  }
+  function startCapture() {
+    navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: { ideal: 30 } }, audio: { suppressLocalAudioPlayback: true },
+      preferCurrentTab: true, selfBrowserSurface: 'include', surfaceSwitching: 'exclude', monitorTypeSurfaces: 'exclude'
+    }).then(function (stream) {
+      cap.stream = stream;
+      stream.getVideoTracks()[0].addEventListener('ended', function () {
+        cap.stream = null; stopRecorder(); captureGate(true, 'Sharing stopped. Click Start studio again.'); send({ type: 'capture-lost' });
+      });
+      captureGate(false);
+      send({ type: 'capture-ready' });
+    }).catch(function () { captureGate(true, 'Sharing was not allowed. Click Start studio and choose Allow / Share.'); });
+  }
+  function startRecorder() {
+    stopRecorder();
+    if (!cap.stream) { send({ type: 'capture-lost' }); captureGate(true); return; }
+    var tracks = cap.stream.getVideoTracks().slice();
+    var a = cap.stream.getAudioTracks();
+    tracks.push(a.length ? a[0] : groove.streamTrack());
+    var types = ['video/webm;codecs=h264,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+    var mime = types.filter(function (t) { return window.MediaRecorder && MediaRecorder.isTypeSupported(t); })[0];
+    var token = new URLSearchParams(location.search).get('token') || '';
+    var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    var ing = cap.ingest = new WebSocket(proto + '//' + location.host + '/ws?role=ingest&token=' + encodeURIComponent(token));
+    ing.binaryType = 'arraybuffer';
+    ing.onopen = function () {
+      var rec = cap.rec = new MediaRecorder(new MediaStream(tracks), { mimeType: mime, videoBitsPerSecond: 8000000, audioBitsPerSecond: 160000 });
+      rec.ondataavailable = function (e) {
+        if (e.data && e.data.size && ing.readyState === 1) e.data.arrayBuffer().then(function (b) { if (ing.readyState === 1) ing.send(b); });
+      };
+      rec.start(250);
+    };
+  }
+  function stopRecorder() {
+    if (cap.rec) { try { cap.rec.stop(); } catch (e) { /* ignore */ } cap.rec = null; }
+    if (cap.ingest) { var i = cap.ingest; cap.ingest = null; setTimeout(function () { try { i.close(); } catch (e) { /* ignore */ } }, 400); }
+  }
+  if (CAPTURE) {
+    document.documentElement.classList.add('capture-mode');
+    fitStage(); window.addEventListener('resize', fitStage);
+    captureGate(true);
+  }
+
   /* ---------------- server link ---------------- */
   var ws = null, isDirty = true;
   function dirty() { isDirty = true; }
@@ -374,12 +437,13 @@
     var token = new URLSearchParams(location.search).get('token') || '';
     var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     try { ws = new WebSocket(proto + '//' + location.host + '/ws?role=broadcast&token=' + encodeURIComponent(token)); } catch (e) { return setTimeout(connect, 3000); }
-    ws.onopen = function () { isDirty = true; };
+    ws.onopen = function () { isDirty = true; if (cap.stream) send({ type: 'capture-ready' }); else if (CAPTURE) send({ type: 'capture-lost' }); };
     ws.onmessage = function (ev) {
       var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
       if (m.type === 'chat') (m.items || []).forEach(onChat);
       else if (m.type === 'cmd') onCommand(m);
-      else if (m.type === 'hello') isDirty = true;
+      else if (m.type === 'hello') { isDirty = true; if (cap.stream) send({ type: 'capture-ready' }); }
+      else if (m.type === 'capture') { if (m.on) startRecorder(); else stopRecorder(); }
     };
     ws.onclose = function () { setTimeout(connect, 2000); };
   }

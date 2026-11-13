@@ -18,7 +18,7 @@ const PASSCODE = process.env.CONTROL_PASSCODE || '';
 const DATA_DIR = process.env.DATA_DIR || '/tmp/market-rush-live';
 const PUBLIC = path.join(__dirname, 'public');
 const GAME_ASSETS = path.join(__dirname, '..', 'assets');
-const BROADCAST_TOKEN = crypto.randomBytes(16).toString('hex');
+const BROADCAST_TOKEN = process.env.BROADCAST_TOKEN || crypto.randomBytes(16).toString('hex');
 const MAX_MUSIC_BYTES = 40 * 1024 * 1024;
 
 if (!PASSCODE) console.warn('[warn] CONTROL_PASSCODE is not set. Set it before deploying, or anyone can control your stream.');
@@ -56,7 +56,12 @@ function safeJoin(base, rel) {
 function toControls(msg) { const s = JSON.stringify(msg); controls.forEach((c) => { if (c.readyState === 1) c.send(s); }); }
 function toBroadcast(msg) { if (broadcast && broadcast.readyState === 1) broadcast.send(JSON.stringify(msg)); }
 
-const studio = new Studio({ port: PORT, token: BROADCAST_TOKEN, onStatus: () => pushStatus() });
+let captureReady = false;
+const studio = new Studio({
+  port: PORT, token: BROADCAST_TOKEN, onStatus: () => pushStatus(),
+  onEncoderStart: () => toBroadcast({ type: 'capture', on: true }),
+  onEncoderStop: () => toBroadcast({ type: 'capture', on: false })
+});
 const chat = new YouTubeChat({
   apiKey: process.env.YT_API_KEY || '',
   minPollMs: parseInt(process.env.CHAT_POLL_MS || '5000', 10),
@@ -68,7 +73,7 @@ function status() {
   return {
     type: 'status',
     live: studio.live, since: studio.since, encoder: studio.encoder, sceneReady: !!(broadcast && broadcast.readyState === 1),
-    sceneError: studio.sceneError, streamKeySet: !!streamKey, chat: chat.status(), customMusic: !!music
+    sceneError: studio.sceneError, localMode: studio.mode === 'local', captureReady, streamKeySet: !!streamKey, chat: chat.status(), customMusic: !!music
   };
 }
 function pushStatus() { toControls(status()); }
@@ -116,7 +121,7 @@ const server = http.createServer((req, res) => {
 });
 
 /* ---------------- WebSockets ---------------- */
-const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 64 * 1024 });
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 8 * 1024 * 1024 });
 
 wss.on('connection', (ws, req) => {
   const q = new URL(req.url, 'http://x').searchParams;
@@ -129,9 +134,18 @@ wss.on('connection', (ws, req) => {
     ws.on('message', (data) => {
       let m; try { m = JSON.parse(data); } catch (e) { return; }
       if (m.type === 'state') { lastState = m; toControls(m); }
+      else if (m.type === 'capture-ready') { captureReady = true; pushStatus(); }
+      else if (m.type === 'capture-lost') { captureReady = false; pushStatus(); }
     });
-    ws.on('close', () => { if (broadcast === ws) broadcast = null; pushStatus(); });
+    ws.on('close', () => { if (broadcast === ws) { broadcast = null; captureReady = false; } pushStatus(); });
+    ws.send(JSON.stringify({ type: 'hello' }));
     pushStatus();
+    return;
+  }
+
+  if (role === 'ingest') {
+    if (q.get('token') !== BROADCAST_TOKEN) return ws.close(4001, 'bad token');
+    ws.on('message', (data, isBinary) => { if (isBinary) studio.feed(data); });
     return;
   }
 
@@ -161,6 +175,7 @@ async function handleControl(ws, m) {
     case 'golive':
       if (m.key) streamKey = String(m.key).trim();
       if (!streamKey && !process.env.OUTPUT_URL) return reply(ws, { type: 'toast', level: 'error', text: 'Add your YouTube stream key first' });
+      if (studio.mode === 'local' && !captureReady) return reply(ws, { type: 'toast', level: 'error', text: 'On your Mac, click "Start studio" in the Market Rush window first' });
       studio.goLive(process.env.OUTPUT_URL || ('rtmps://a.rtmps.youtube.com:443/live2/' + streamKey));
       break;
     case 'endlive':

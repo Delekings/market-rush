@@ -69,6 +69,13 @@
 
   AfroGroove.prototype.setIntensity = function (v) { this.intensity = Math.max(0, Math.min(1, v)); };
 
+  // An audio track of the groove, for recording the stream directly.
+  AfroGroove.prototype.streamTrack = function () {
+    if (!this.ctx) this.setup();
+    if (!this.dest) { this.dest = this.ctx.createMediaStreamDestination(); this.master.connect(this.dest); }
+    return this.dest.stream.getAudioTracks()[0];
+  };
+
   AfroGroove.prototype.tick = function () {
     var eighth = 60 / this.bpm / 3;
     while (this.next < this.ctx.currentTime + 0.15) {
