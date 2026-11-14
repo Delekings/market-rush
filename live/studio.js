@@ -40,7 +40,9 @@ class Studio {
     const url = 'http://127.0.0.1:' + this.port + '/broadcast?capture=1&token=' + this.token;
     const flags = ['--app=' + url, '--user-data-dir=' + LOCAL_PROFILE, '--window-size=1280,800', '--window-position=60,60',
       '--autoplay-policy=no-user-gesture-required', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
-      '--disable-background-timer-throttling', '--no-first-run', '--no-default-browser-check'];
+      '--disable-background-timer-throttling', '--no-first-run', '--no-default-browser-check',
+      // Keep drawing (and so keep streaming) even when other windows cover the studio window.
+      '--disable-features=MacWebContentsOcclusion,CalculateNativeWinOcclusion'];
     let p;
     if (process.platform === 'darwin') p = spawn('open', ['-na', 'Google Chrome', '--args'].concat(flags), { stdio: 'ignore' });
     else { const c = findChrome(); if (!c) { this.sceneError = 'Chrome not found'; return this.onStatus(); } p = spawn(c, flags, { stdio: 'ignore', detached: true }); }
