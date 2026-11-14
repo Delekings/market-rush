@@ -351,7 +351,7 @@
   }
   function startCapture() {
     navigator.mediaDevices.getDisplayMedia({
-      video: { frameRate: { ideal: 30 } }, audio: { suppressLocalAudioPlayback: true },
+      video: { frameRate: { ideal: 30, max: 30 }, width: { max: 1280 }, height: { max: 800 } }, audio: { suppressLocalAudioPlayback: true },
       preferCurrentTab: true, selfBrowserSurface: 'include', surfaceSwitching: 'exclude', monitorTypeSurfaces: 'exclude'
     }).then(function (stream) {
       cap.stream = stream;
@@ -375,7 +375,13 @@
     var ing = cap.ingest = new WebSocket(proto + '//' + location.host + '/ws?role=ingest&token=' + encodeURIComponent(token));
     ing.binaryType = 'arraybuffer';
     ing.onopen = function () {
-      var rec = cap.rec = new MediaRecorder(new MediaStream(tracks), { mimeType: mime, videoBitsPerSecond: 8000000, audioBitsPerSecond: 160000 });
+      var rec = cap.rec = new MediaRecorder(new MediaStream(tracks), { mimeType: mime, videoBitsPerSecond: 4000000, audioBitsPerSecond: 128000 });
+      var vt = cap.stream.getVideoTracks()[0];
+      send({ type: 'diag', info: { mime: mime, settings: vt.getSettings ? vt.getSettings() : null, dpr: window.devicePixelRatio, inner: [innerWidth, innerHeight], ua: navigator.userAgent } });
+      var n = 0, sz = 0;
+      clearInterval(cap.diagT);
+      cap.diagT = setInterval(function () { send({ type: 'diag', info: { chunks5s: n, kb5s: Math.round(sz / 1024), visibility: document.visibilityState, recState: rec.state } }); n = 0; sz = 0; }, 5000);
+      rec.addEventListener('dataavailable', function (e) { n++; sz += e.data ? e.data.size : 0; });
       rec.ondataavailable = function (e) {
         if (e.data && e.data.size && ing.readyState === 1) e.data.arrayBuffer().then(function (b) { if (ing.readyState === 1) ing.send(b); });
       };
@@ -383,6 +389,7 @@
     };
   }
   function stopRecorder() {
+    clearInterval(cap.diagT);
     if (cap.rec) { try { cap.rec.stop(); } catch (e) { /* ignore */ } cap.rec = null; }
     if (cap.ingest) { var i = cap.ingest; cap.ingest = null; setTimeout(function () { try { i.close(); } catch (e) { /* ignore */ } }, 400); }
   }

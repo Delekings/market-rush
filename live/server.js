@@ -134,6 +134,7 @@ wss.on('connection', (ws, req) => {
     ws.on('message', (data) => {
       let m; try { m = JSON.parse(data); } catch (e) { return; }
       if (m.type === 'state') { lastState = m; toControls(m); }
+      else if (m.type === 'diag') { Studio.log('diag.log', 'scene: ' + JSON.stringify(m.info)); }
       else if (m.type === 'capture-ready') { captureReady = true; pushStatus(); }
       else if (m.type === 'capture-lost') { captureReady = false; pushStatus(); }
     });
@@ -145,7 +146,13 @@ wss.on('connection', (ws, req) => {
 
   if (role === 'ingest') {
     if (q.get('token') !== BROADCAST_TOKEN) return ws.close(4001, 'bad token');
-    ws.on('message', (data, isBinary) => { if (isBinary) studio.feed(data); });
+    let bytes = 0, chunks = 0;
+    const t = setInterval(() => {
+      Studio.log('diag.log', 'ingest last 5s: ' + chunks + ' chunks, ' + Math.round(bytes / 5 / 1024 * 8) + ' kbps in; load=' + require('os').loadavg().map((x) => x.toFixed(2)).join(','));
+      bytes = 0; chunks = 0;
+    }, 5000);
+    ws.on('message', (data, isBinary) => { if (isBinary) { bytes += data.length; chunks++; studio.feed(data); } });
+    ws.on('close', () => clearInterval(t));
     return;
   }
 

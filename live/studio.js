@@ -19,6 +19,10 @@ const SINK = 'mr_sink';
 const MODE = process.env.STUDIO_MODE || 'linux';            // 'linux' (virtual screen) or 'local' (your own Chrome records itself)
 const FFMPEG = process.env.FFMPEG_BIN || 'ffmpeg';
 const LOCAL_PROFILE = path.join(os.tmpdir(), 'mr-studio-profile');
+const LOG_DIR = path.join(__dirname, 'logs');
+try { fs.mkdirSync(LOG_DIR, { recursive: true }); } catch (e) { /* ignore */ }
+function logTo(name, line) { try { fs.appendFileSync(path.join(LOG_DIR, name), new Date().toISOString() + ' ' + line + '\n'); } catch (e) { /* ignore */ } }
+
 
 function findChrome() {
   const list = [process.env.CHROME_BIN, '/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable'];
@@ -157,7 +161,9 @@ class Studio {
     if (local) setTimeout(() => this.onEncoderStart(), 300);
     this.live = true; this.since = this.since || Date.now(); this.encoder = { state: 'connecting' };
     let buf = '';
+    logTo('ffmpeg.log', 'START ' + FFMPEG + ' ' + args.map((a) => (/live2\//.test(a) ? a.replace(/live2\/.*/, 'live2/<key>') : a)).join(' '));
     p.stderr.on('data', (d) => {
+      logTo('ffmpeg.log', d.toString().replace(/\r/g, '\n').trim().split('\n').slice(-2).join(' | '));
       buf = (buf + d.toString()).slice(-2000);
       const m = buf.match(/fps=\s*([\d.]+).*?bitrate=\s*([\d.]+)kbits\/s(?![\s\S]*fps=)/);
       if (m) { this.encoder = { state: 'streaming', fps: parseFloat(m[1]), kbps: Math.round(parseFloat(m[2])) }; }
@@ -166,6 +172,7 @@ class Studio {
     });
     const ticker = setInterval(() => this.onStatus(), 2000);
     p.on('exit', (code) => {
+      logTo('ffmpeg.log', 'EXIT code=' + code);
       clearInterval(ticker);
       this.procs.ffmpeg = null;
       if (local) this.onEncoderStop();
@@ -201,4 +208,5 @@ class Studio {
   }
 }
 
+Studio.log = logTo;
 module.exports = Studio;
